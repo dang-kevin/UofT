@@ -1,0 +1,240 @@
+---
+title: "STA442 Homework 2"
+author: "Kevin Dang - 1003205079"
+date: "Due Wednesday October 16, 2019"
+output: pdf_document
+header-includes:
+ - \usepackage{amsmath}
+---
+
+# Question 1: Math
+
+In this study, our primary goal is to investigate whether there are significant differences in mathematics achievement scores between different schools, or whether the differences within schools are just as large as between students attending different schools. To answer this question, we first fit a linear mixed model with mathematics achievement scores (`MathAch`) as the response, `Minority`, `Sex`, `SES`, `MEANSES` as fixed effects and `School` as a random effect. `Minority` represents whether the student is a minority or not, `Sex` indicates male or female, `SES` is a measure of socio-economic status, `MEANSES` is the mean `SES` for each school and `School` is an identifier for each school. The model can be written as follows with $b_i$ as the random effect for school: 
+\[
+MathAch = \beta_0 + \beta_1 MinorityYes + \beta_2 SexMale + \beta_3 SES + \beta_4 MEANSES + b_i
+\]
+
+The model assumptions need to be checked before we can start interpreting the coefficients from Table \ref{tab:tab1}. The Normal QQ Plot in Figure \ref{fig:fig1} shows that the random effects are normally distributed. Figure \ref{fig:fig2} represents the 95\% prediction intervals for each school and we can see that the intervals are quite spread out and most are not centered around zero, so it is appropriate to include `School` as a random effect in the model.
+
+The first impressions to note are that students who are minorities perform worse than those who are not minorities and males perform better than females on average. Those with higher socio-economic status perform better than those of lower socio-economic status and this also applies to the mean level of socio-economic status. The previous statements apply when all other covariates are held constant; for instance if both a male and female student are minorities and are of the same level of socio-economic status then the model predicts that the male student will achieve a higher score. These results are given by the extremely small p-values corresponding to those coefficients in Table \ref{tab:tab1} which were all rounded to 0. 
+
+The next part involves the discussion of the random effect variable, `School`. Two individuals who are members of a minority racial group and have the same socio-economic status while attending the same school will have a difference of mathematics achievement scores with standard deviation $\sqrt{2}\tau = \sqrt{2}\times5.992$. The school level effect is $\sigma = 1.563$. Converting them to variances we have $\tau^2 = 35.904$ and $\sigma^2 = 2.443$. The proportions of variances are $\frac{\tau^2}{\sigma^2+\tau^2} = 0.936$ and $\frac{\sigma^2}{\sigma^2+\tau^2} = 0.064$ for within-school variance and between-school variance respectively. 
+
+Since the between-school variance represents 6.4\% of the total variance, and many 95\% prediction intervals for each school do not include 0 we can conclude that there are significant differences in mathematics achievement scores between different schools.
+
+```{r, message=F, warning=F, echo=F}
+library(tidyverse)
+library(nlme)
+library(lme4)
+library(knitr)
+
+data("MathAchieve", package = "MEMSS")
+
+# Linear Mixed Model with School as a random effect
+mathlme <- lme(MathAch ~ Minority + Sex + SES + MEANSES, random = ~1 | School, data = MathAchieve)
+kable(Pmisc::lmeTable(mathlme), digits = 3, escape = FALSE, 
+             caption = "\\label{tab:tab1}Linear Mixed Model for Math Achievement Scores") # Table 1
+```
+
+
+```{r, message=F, warning=F, echo=F, fig.cap="\\label{fig:fig1}Normal QQ Plot"}
+# Use lmer for random effects plots
+mathlmer <- lmer(MathAch ~ Minority + Sex + SES + MEANSES + (1|School), data = MathAchieve)
+
+# Normal QQ Plot
+data.frame(randef = ranef(mathlmer)$School[ ,1]) %>%
+  mutate_at("randef",funs( (. - mean(.)) / sd(.))) %>%
+  arrange(randef) %>%
+  mutate(q = qnorm(seq(1:nrow(ranef(mathlmer)$School))/(1 + nrow(ranef(mathlmer)$School)))) %>%
+  ggplot(aes(x = q,y = randef)) +
+  theme_light() +
+  geom_point() +
+  geom_abline(slope = 1,intercept = 0,colour = "blue") +
+  labs(title = "Normal QQ Plot of Random Effects",
+       x = "Quantiles of Standard Normal",
+       y = "Random Effects")
+```
+
+```{r, message=F, warning=F, echo=F, results='hide', fig.cap="\\label{fig:fig2}95% prediction intervals for each school"}
+# Plot random effects
+randef <- ranef(mathlmer, condVar=TRUE)
+lattice::dotplot(randef)
+```
+
+
+\newpage
+
+# Appendix A: Math Code
+```{r, eval=F}
+library(tidyverse)
+library(nlme)
+library(lme4)
+library(knitr)
+
+data("MathAchieve", package = "MEMSS")
+
+# Linear Mixed Model with School as a random effect
+mathlme <- lme(MathAch ~ Minority + Sex + SES + MEANSES, random = ~1 | School, data = MathAchieve)
+kable(Pmisc::lmeTable(mathlme), digits = 3, escape = FALSE, 
+             caption = "\\label{tab:tab1}Linear Mixed Model for Math Achievement Scores") # Table 1
+
+# Use lmer for random effects plots
+mathlmer <- lmer(MathAch ~ Minority + Sex + SES + MEANSES + (1|School), data = MathAchieve)
+
+# Normal QQ Plot
+data.frame(randef = ranef(mathlmer)$School[ ,1]) %>%
+  mutate_at("randef",funs( (. - mean(.)) / sd(.))) %>%
+  arrange(randef) %>%
+  mutate(q = qnorm(seq(1:nrow(ranef(mathlmer)$School))/(1 + nrow(ranef(mathlmer)$School)))) %>%
+  ggplot(aes(x = q,y = randef)) +
+  theme_light() +
+  geom_point() +
+  geom_abline(slope = 1,intercept = 0,colour = "blue") +
+  labs(title = "Normal QQ Plot of Random Intercepts",
+       x = "Theoretical Quantiles",
+       y = "Sample Quantiles")
+
+# Plot random effects
+randef <- ranef(mathlmer, condVar=TRUE)
+lattice::dotplot(randef)
+```
+
+\newpage
+
+# Question 2: Drugs
+
+## Introduction
+The Treatment Episode Data Set contains information from treatment facilities that include substance abuse, discharges and patient characteristics. The first hypothesis that we want to investigate is the effect of addiction to hard drugs (i.e. heroin, opiates, methamphetamine, cocaine) versus the effect of addiction to alcohol or marijuana on the chances of a young person completing their treatment program. The second hypothesis is that treatment programs in some American states are more effective than in other states which have low completion rates.
+
+## Methods
+The analysis involves Bayesian inference. The model that is used is a Binomial Mixed Model with a logit link and a PC prior, which takes the most basic form as follows:
+\begin{align*}
+Y_{ij} \sim Bin(N_i,\mu_i) \\
+logit(\mu_i)=\beta_0 + \beta X_j + U_i \\
+U_i \sim iid \ \ N(0,\sigma^2) \\
+\\
+\text{Priors:} \\
+\beta \sim N(0,10^2I) \\
+\sigma \sim PC(0.1,0.05)
+\end{align*}
+\[
+U_i \overset{iid}{\sim} N(0,\sigma^2)
+\]
+Where $Y_{ij}$ is an individual i treated for addiction to substance j. $N_i$ is the number of observations while $\mu_i$ is the probability of an individual completing the treatment. $X_j$ is substance type which includes heroin, opiates, methamphetamine, cocaine, alcohol and marijuana. $U_i$ represents the random effect of each US state.
+
+There are some important confounders that need to be included in the model such as `GENDER`, `AGE` and `raceEthnicity`, so we can expand the model below:
+\[
+log(\frac{\mu_i}{1-\mu_i})=\beta_0 + \beta_1 I(Substance) + \beta_2 Gender + \beta_3 I(Age) + \beta_4 I(raceEthnicity) + U_i
+\]
+where $\beta_1$ represents 5 parameters since there are 6 substances in total (with marijuana as the baseline), $\beta_3$ represents 3 parameters since there are 4 age groups (with `21-24` as the baseline) and $\beta_4$ represents 9 parameters in total since there are 10 ethnic groups in the data (with `WHITE` as the baseline). The written model was simplified with indicator variables for clarity and convenience.
+
+$\beta$ is given a Gaussian prior which has a variance of 100, which is smaller than the default 1000. This is because the coefficients are expected to be small as we are using a binomial family. The PC prior is used for the scale parameter $\sigma$ which is the standard deviation of the random effects. The parameters for this prior were suggested by Patrick Brown.
+
+## Results
+
+Due to lack of computational resources, the model was not able to run on the full dataset, so a random sample of 100000 observations was taken from the dataset to be used in the model output in Table \ref{tab:tab2}. The model parameter estimates have all been exponentiated for easier interpretation (e.g. $\beta$ becomes $\exp(\beta)$).
+
+```{r, message=F, warning=F, echo=F}
+library(INLA)
+library(plyr)
+
+#download.file("http://pbrown.ca/teaching/appliedstats/data/drugs.rds","drugs.rds")
+xSub = readRDS("drugs.rds")
+
+df = na.omit(xSub)
+df$y = as.numeric(df$completed)
+
+## Create an indicator variable for "hard" drugs
+#df <- df %>% 
+#  mutate(hard = case_when(grepl("5|7|10|3",SUB1) ~ "yes",
+#                          grepl("4|2",SUB1) ~ "no"))
+
+# Rename raceEthniticity levels to save space
+df$raceEthnicity <- revalue(df$raceEthnicity, 
+                            c("BLACK OR AFRICAN AMERICAN"="Black",
+                              "AMERICAN INDIAN (OTHER THAN ALASKA NATIVE)"="American Indian",
+                              "OTHER SINGLE RACE"="Other","TWO OR MORE RACES"="Two or more",
+                              "NATIVE HAWAIIAN OR OTHER PACIFIC ISLANDER"="Hawaiian/Other Pacific",
+                              "ASIAN OR PACIFIC ISLANDER"="Asian/Pacific Islander",
+                              "ALASKA NATIVE (ALEUT, ESKIMO, INDIAN)"="Alaska Native"))
+
+# Randomly sample to get subset of data, not enough computation power
+set.seed(1998)
+sample <- sample_n(df,100000)
+
+# Binomial Mixed Model
+ires = inla(y ~ SUB1 + GENDER + AGE + raceEthnicity + 
+              f(STFIPS, hyper=list(prec=list(prior='pc.prec',param=c(0.1, 0.05)))),
+            data=sample, family='binomial', 
+            control.fixed = list(mean = 0, mean.intercept = 0, prec = 10^(-2), 
+                                 prec.intercept = 10^(-2)), 
+            control.family = list(link = "logit"), 
+            control.inla = list(strategy='gaussian', int.strategy='eb'))
+kable(exp(ires$summary.fixed), digits=2,
+      caption = "\\label{tab:tab2}Binomial Mixed Model for Drug Treatment Completion")
+```
+
+From the output we can see that holding all other variables constant, the odds of an alcohol user completing their treatment is $100\times(1.61-1) = 61\%$ greater than a marijuana user. The odds (relative to marijuana) for heroin is $100\times(0.89-1)=-11\%$, opiates is -10\%, methamphetamine is -4\% and cocain is -10\%. Three out of the four hard substances groups have odds under 1 for their upper bound of the 95\% interval, so users of these hard drugs have a lower probability of completing their treatment compared to alcohol and marijuana users. The one exception is methamphetamine users, where the upper bound of the 95\% interval is 1.03, so this group cannot be ruled out in having a similar likelihood of completing their treatment as marijuana users if they have very similar characteristics.
+
+Next we look at 95\% credible intervals for various American. states in Table \ref{tab:tab3}. Quite a few of the credible intervals do not include 0, so it appears as though that there is a difference in completion of treatment programs across different states. For example, Florida has a 95\% credible interval of (1.1, 1.5) whereas Virginia has an interval of (-3.0, -2.3) so there is a significant difference between these two states.
+
+```{r, message=F, warning=F, echo=F}
+# 95% credible intervals for the Random Intercepts
+states = cbind(ires$summary.random$STFIPS[1:26, c(1, 2, 4, 6)], 
+                ires$summary.random$STFIPS[-(1:26), c(1, 2, 4, 6)])
+colnames(states) = gsub("uant", "", colnames(states))
+kable(states, digits = 1,
+      caption = "\\label{tab:tab3} Random Intercepts with 95% credible intervals")
+```
+
+## Conclusions
+
+Our analysis supports the two hypotheses described in the introduction. The likelihood of a young person completing their drug treatment program depends on the substance that they are addicted to, with alcohol or marijuana being easier to treat compared to hard drugs such as heroin, opiates, methamphetamine and cocaine. An interesting result is that methamphetamine users have nearly the same chance of completing their treatment as marijuana users, provided that their demographic characteristics are the same. The analysis also showed that some American states have effective treatment programs whereas other states have programs with very low completion rates. 
+
+
+\newpage
+
+# Appendix B: Drugs Code
+
+```{r, eval=F}
+library(INLA)
+library(plyr)
+
+#download.file("http://pbrown.ca/teaching/appliedstats/data/drugs.rds","drugs.rds")
+xSub = readRDS("drugs.rds")
+
+df = na.omit(xSub)
+df$y = as.numeric(df$completed)
+
+# Rename raceEthniticity levels to save space
+df$raceEthnicity <- revalue(df$raceEthnicity, 
+                            c("BLACK OR AFRICAN AMERICAN"="Black",
+                              "AMERICAN INDIAN (OTHER THAN ALASKA NATIVE)"="American Indian",
+                              "OTHER SINGLE RACE"="Other","TWO OR MORE RACES"="Two or more",
+                              "NATIVE HAWAIIAN OR OTHER PACIFIC ISLANDER"="Hawaiian/Other Pacific",
+                              "ASIAN OR PACIFIC ISLANDER"="Asian/Pacific Islander",
+                              "ALASKA NATIVE (ALEUT, ESKIMO, INDIAN)"="Alaska Native"))
+
+# Randomly sample to get subset of data, not enough computation power
+set.seed(1998)
+sample <- sample_n(df,100000)
+
+# Binomial Mixed Model
+ires = inla(y ~ SUB1 + GENDER + AGE + raceEthnicity + 
+              f(STFIPS, hyper=list(prec=list(prior='pc.prec',param=c(0.1, 0.05)))),
+            data=sample, family='binomial', 
+            control.fixed = list(mean = 0, mean.intercept = 0, prec = 10^(-2), 
+                                 prec.intercept = 10^(-2)), 
+            control.family = list(link = "logit"), 
+            control.inla = list(strategy='gaussian', int.strategy='eb'))
+kable(exp(ires$summary.fixed), digits=2,
+      caption = "\\label{tab:tab2}Binomial Mixed Model for Drug Treatment Completion")
+
+# 95% credible intervals for the Random Intercepts
+states = cbind(ires$summary.random$STFIPS[1:26, c(1, 2, 4, 6)], 
+                ires$summary.random$STFIPS[-(1:26), c(1, 2, 4, 6)])
+colnames(states) = gsub("uant", "", colnames(states))
+kable(states, digits = 1,
+      caption = "\\label{tab:tab3} Random Intercepts with 95% credible intervals")
+```
+
