@@ -1,0 +1,252 @@
+---
+title: "Assignment 1"
+author: "Kevin Dang"
+date: "July 18, 2018"
+geometry: margin=1in
+output:
+  pdf_document:
+    latex_engine: xelatex
+header-includes:
+- \usepackage{fontspec}
+- \setmainfont{Times New Roman}
+fontsize: 12pt
+---
+
+```{r load-packages, echo =FALSE, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+
+```
+
+Important Note: Footers are used in this report in order to save space. Italicized text containing a footer notation indicates that there is a plot or code output that is to be referred to in the appendix.
+
+\newpage
+
+# Calibrating a Snow Gauge
+
+Snow gauges are used to indirectly measure the density of snow; a high snow density leads to less absorption of water. Analyzing this information is important because we want to monitor water levels and prevent floods from occurring. My analysis involves specifying the relationship between `density` of polyethylene blocks (a substitute for snow) and `gain` -- an amplified version of gamma photon count.
+From the *Density vs Gain*[^1] plot, it appears as though there is an inverse exponential relationship between the variables. A linear model was initially created, however the *standardized residuals*[^2] appear to follow a distinct pattern, so a standard linear model cannot directly be fit to the data. A *box-cox transformation*[^3] was done on the `gain` variable, and the plot shows that a value of $\lambda$ = 0.02020202 is the best power transformation; in this case, a log transformation is appropriate.
+After completing a log transformation on the `gain` variable, a valid linear model for *Density vs log(Gain)*[^4] was produced since the new *Residuals vs Fitted Values*[^5] plot does not show a distinct pattern. Also, the *Normal QQ plot*[^6] on the transformed data does not show evidence of skew -- the normality condition is met. The *regression output*[^7] shows a significant relationship between `log(Gain)` and `density`, as the p-value is extremely small. In addition, the multiple R-squared value of 0.9958 provides further evidence that this model is appropriate.
+The linear model is: mean `density` = 1.298013 g/cm^3^ - (0.216203 g/cm^3^ * `log(gain)`). This model can be used to estimate the mean `density` of snow at a particular value of `gain` since the snow gauge has been calibrated, but we must proceed with caution because polyethylene blocks were used in place of snow blocks for the model.
+
+[^1]: Appendix A, Density vs Gain (Gauge data)
+[^2]: Appendix A, Residuals vs Fitted Values (Normal linear model for Gauge data)
+[^3]: Appendix A, Box-Cox Transformation
+[^4]: Appendix A, Density vs log(Gain) (Transformed log model for Gauge data)
+[^5]: Appendix A, Residuals vs Fitted Values (Transformed log model for Gauge data)
+[^6]: Appendix A, Normal QQ plot (Transformed log model for Gauge data)
+[^7]: Appendix A, Gauge Regression
+
+\newpage
+
+# Appendix A
+##Snow Gauge Data
+```{r snow-gauge-1, echo=FALSE, message=FALSE, warning=FALSE, fig.width=3.2, fig.height=3.2}
+
+gauge <- readr::read_table("https://www.stat.berkeley.edu/~statlabs/data/gauge.data",col_types = "dd")
+
+gauge <- gauge[rowSums(is.na(gauge)) != ncol(gauge),]
+
+glimpse(gauge)
+
+# Code from lecture 1
+# Plot density vs gain
+gauge %>%
+  ggplot(aes(x=gain, y=density)) + 
+  theme_classic() +
+  geom_point(pch=21) +
+  labs(title="Density vs Gain",
+       subtitle="Gauge data",
+       x="Gain",
+       y="Density"~(g/cm^{3}))
+
+# Code from Lecture 5
+# Residuals
+gauge_lm1 <- lm(density~gain, data=gauge)
+data_frame(resid = residuals(gauge_lm1),
+           fitted = fitted(gauge_lm1)) %>%
+  mutate_at("resid",funs( (. - mean(.)) / sd(.))) %>%
+  ggplot(aes(x = fitted,y = resid)) +
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = -2,linetype="dashed",colour="red") +
+  geom_hline(yintercept = 2,linetype="dashed",colour="red") +
+  labs(title = "Residuals vs Fitted Values",
+       subtitle = "Normal linear model for Gauge data",
+       x = "Fitted Values",
+       y = "Residuals")
+
+```
+
+#### Box-Cox Transformation
+```{r, box-cox-gauge, echo=FALSE, message=FALSE, warning=FALSE, fig.width=3, fig.height=3}
+
+# Code from lecture 3
+#Box-Cox transformation
+library(MASS)
+
+gain_boxcox <- boxcox(gain ~ 1,data=gauge)
+gain_boxcox$x[which(gain_boxcox$y == max(gain_boxcox$y))]
+
+# Code from lecture 3
+#Log transformation
+gauge_transform <- gauge %>%
+  mutate(log_gain = log(gain))
+
+```
+
+
+```{r snow-gauge-2, echo=FALSE, message=FALSE, warning=FALSE, fig.width=3.2, fig.height=3.2}
+
+# Code from lecture 3
+# Plot density vs log(gain)
+gauge_transform %>%
+  ggplot(aes(x=log_gain, y=density)) + 
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_smooth(method = "lm") +
+  labs(title="Density vs log(Gain)",
+       subtitle="Transformed log model for Gauge data",
+       x="log(Gain)",
+       y="Density"~(g/cm^{3}))
+
+# Code from Lecture 5
+# Residuals
+gauge_lm2 <- lm(density ~ log_gain, data=gauge_transform)
+data_frame(resid = residuals(gauge_lm2),
+           fitted = fitted(gauge_lm2)) %>%
+  mutate_at("resid",funs( (. - mean(.)) / sd(.))) %>%
+  ggplot(aes(x = fitted,y = resid)) +
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = -2,linetype="dashed",colour="red") +
+  geom_hline(yintercept = 2,linetype="dashed",colour="red") +
+  labs(title = "Residuals vs Fitted Values",
+       subtitle = "Transformed log model for Gauge data",
+       x = "Fitted Values",
+       y = "Residuals")
+
+#Code from lecture 3
+# Normal Q-Q
+gauge_transform %>%
+  mutate_at("log_gain", funs((. - mean(.)) / sd(.))) %>%
+  arrange(log_gain) %>%
+  mutate(q = qnorm(1:n() / (n() + 1))) %>%
+  ggplot(aes(x = q,y = log_gain)) +
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_abline(slope = 1,intercept = 0,colour = "red") +
+  labs(title = "Normal QQ-plot",
+       subtitle="Transformed log model for Gauge data",
+       x = "Theoretical Quantiles",
+       y = "Sample Quantiles")
+
+```
+
+\newpage
+
+### Gauge Regression
+```{r, gauge-regression, echo=FALSE, message=FALSE, warning=FALSE}
+
+summary(gauge_lm2)
+
+```
+
+\newpage
+
+# Dungeness Crab Growth 
+
+As Dungeness crabs grow, they need to replace their carapace; a process referred to as molting. My analysis involves grouping the adult female Dungeness crabs by whether they recently molted or not, estimating the mean carapace size of both groups, then determining whether there is a significant difference between the groups.
+First, a *boxplot*[^8] of the shell size (`size`) by the shell type (`shell`) was created. Shell type 0 represents a fouled carapace which can be interpreted as an old shell, while shell type 1 represents a clean carapace -- a recently molted shell. The boxplot shows that older shells contain some outliers, while recent shells have no outliers. From the *summary statistics*[^9], type 0 shells are larger than type 1 shells by 7mm on average. 
+A *two sample t-test*[^10] yielded a statistically significant p-value; this indicates that the means of the 2 groups are not equivalent. The two sample groups are independent,since the traps that were used were designed to catch adult female Dungeness crabs of all sizes, meaning that this sample is representative of the population. An *F-test to compare two variances*[^11] shows that the two sample group variances are similar -- the constant variance condition is met. Both the *Normal QQ Plot*[^12] and *Histogram of Shell Size*[^13] show skew in the data, which may be a problem. Fortunately, the sample size of 362 (161 type 0, 201 type 1) is sufficiently large. By the Central Limit Theorem, means of samples from a population approach a normal distribution as sample size increases -- regardless of the population distribution. Thus, the normality condition for the t-test is met.
+Given the strong supporting evidence, adult female Dungeness crabs with older carapaces (shell type 0) on average have larger shells than those with recently molted carapaces (shell type 1).
+
+[^8]: Appendix B, Boxplot of shell size by type (Crab data)
+[^9]: Appendix B, Summary Statistics
+[^10]: Appendix B, Two Sample t-test
+[^11]: Appendix B, F test to compare two variances
+[^12]: Appendix B, Normal QQ plot (Crab data)
+[^13]: Appendix B, Histogram of Shell Size (Crab data)
+
+
+\newpage
+
+# Appendix B
+## Crab Growth Data
+```{r, crab-1, echo=FALSE, message=FALSE, warning=FALSE, fig.width=3.2, fig.height=3.2}
+
+crab <- readr::read_table("https://www.stat.berkeley.edu/users/statlabs/data/crabpop.data",col_types = "dc")
+
+glimpse(crab)
+
+# Code from lecture 2
+#Boxplot
+crab %>%
+  ggplot(aes(x=shell, y=size)) +
+  theme_classic() +
+  geom_boxplot() +
+  labs(title="Boxplot of shell size by type",
+       subtitle = "Crab Data",
+       x = "Shell Type",
+       y = "Shell Size"~(mm))
+
+# Code from lecture 3
+#Normal QQ
+crab %>%
+  mutate_at("size",funs( (. - mean(.)) / sd(.))) %>%
+  arrange(size) %>%
+  mutate(q = qnorm(1:n() / (n() + 1))) %>%
+  ggplot(aes(x = q,y = size)) +
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_abline(slope = 1,intercept = 0,colour = "red") +
+  labs(title = "Normal QQ-plot",
+       subtitle = "Crab Data",
+       x = "Theoretical Quantiles",
+       y = "Sample Quantiles")
+
+# Code from lecture 3
+# Histogram
+crab %>%
+  ggplot(aes(x = size)) +
+  theme_classic() +
+  geom_histogram(aes(y = ..density..),colour="black",fill="lightblue",bins = 15) +
+  geom_density(colour = "red") +
+  labs(title = "Histogram of Shell Size",
+       subtitle = "Crab Data",
+       x = "Shell Size (mm)",
+       y = "Density")
+
+```
+
+### Summary Statistics
+```{r, crab-sum-1, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Code from Lecture 3
+group_means <- crab %>%
+  group_by(shell) %>%
+  summarize(group_mean = mean(size),
+            group_median = median(size),
+            group_sd = sd(size),
+            group_size = n())
+group_means
+
+```
+
+### Two Sample t-test
+```{r, crab-test-2, echo=FALSE, message=FALSE, warning=FALSE}
+
+t_test <- t.test(size ~ shell, data = crab, var.equal = TRUE)
+t_test
+
+```
+
+### F test to compare two variances
+```{r, crab-test-1, echo=FALSE, message=FALSE, warning=FALSE}
+
+f_test <- var.test(size ~ shell, data = crab)
+f_test
+
+```

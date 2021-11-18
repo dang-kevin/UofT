@@ -1,0 +1,169 @@
+---
+title: "Assignment 2"
+author: "Kevin Dang"
+date: "August 8, 2018"
+geometry: margin=1in
+output:
+  pdf_document:
+    latex_engine: xelatex
+header-includes:
+- \usepackage{fontspec}
+- \setmainfont{Times New Roman}
+fontsize: 12pt
+---
+
+```{r load-packages, echo =FALSE, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+
+```
+
+Important Note: Footers are used in this report. Italicized text containing a footer notation indicates that there is a plot or code output that is to be referred to in the appendix.
+
+\newpage
+
+# Nodal Involvement in Prostate Cancer
+
+When deciding on how to treat prostate cancer, physicians use a cancer staging system which takes into account the presence of cancer in the surrounding lymph nodes, referred to as nodal involvement. My analysis involves determining whether prostate cancer has spread to the lymph nodes based on certain characteristics. 
+Starting with the *Nodal Involvement by Predictor*[^1] graph, it is difficult to tell whether any of the five characteristics are successful in predicting nodal involvement. Upon closer inspection, it appears as though `stage`, `acid` and `xray` have more true positive and true negative data points than false positive and false negative data points, which means that they may have a higher success rate when predicting nodal involvement.
+An initial *binary logistic regression model*[^2] shows that `acid` and `xray` are considered somewhat significant, `stage` is close to the standard significance level of 0.05, while `age` and `grade` are not close to the significance level at all. 
+To explore the potentially significant predictors further, a second *binary logistic regression model*[^3] was fit, with nodal involvement ("`r`") as the response and `stage`, `acid` and `xray` as the predictors. The *analysis of deviance table*[^4] for the second model shows a significant reduction in the residual deviance as each of the three variables are added to the null model.
+In regards to the model assumptions, the values are discrete (0 or 1) and there are also no outliers in the data since the z-value for each predictor is under 3. Also, there is low intercorrelation among the predictors, as shown in the *correlation matrix*[^5].
+To clarify what each predictor represents, `stage` is a measure of the size and position of the tumour, `xray` indicates how serious the cancer is from an X-ray reading, and `acid` represents the level of acid phosphatase in the blood serum. These three variables may be helpful indicators of nodal involvement in prostate cancer, from evidence provided by the model. However, physicians should proceed with caution as there are some observations which incorrectly predict nodal involvement.
+
+[^1]: Appendix A: Nodal Involvement, by Predictor
+[^2]: Appendix A: Binary Logistic Regression Model 1
+[^3]: Appendix A: Binary Logistic Regression Model 2
+[^4]: Appendix A: Binary Logistic Regression Model 2, Analysis of Deviance Table
+[^5]: Appendix A: Correlation Matrix
+
+\newpage
+
+# Appendix A
+## Nodal Data
+```{r nodal-1, echo=FALSE, message=FALSE, warning=FALSE, fig.width=6, fig.height=3.2}
+
+# Load SMPracticals package
+# install.packages("SMPracticals")
+library(SMPracticals)
+data(nodal)
+
+nodal_tbl <- as_data_frame(nodal)
+dplyr::glimpse(nodal_tbl)
+
+# Code from lecture 4
+# Nodal involvement by predictor
+nodal_tbl %>%
+  gather(variable,value,aged:acid) %>%
+  ggplot(aes(x = value,y = r)) +
+  theme_classic() +
+  facet_wrap(~variable) +
+  geom_jitter(width=0.3,height=0.3,alpha = 0.4) +
+  scale_y_continuous(breaks = c(0,1),labels = c("No Involvement","Nodal Involvement")) +
+  labs(title = "Nodal Involvement, by Predictor",
+       subtitle = "Nodal Data",
+       x = "Predictor Value",
+       y = "Nodal Involvement?")
+
+```
+
+### Binary Logistic Regression Model 1
+```{r nodal-2, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Fit an initial binary logistic regression model
+nodal_glm1 <- glm(r ~ aged + stage + grade + xray + acid,data = nodal_tbl,family = binomial)
+summary(nodal_glm1)
+
+```
+
+### Binary Logistic Regression Model 2
+```{r nodal-3, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Try simpler binary logistic regression model
+nodal_glm2 <- glm(r ~ stage + xray + acid,data = nodal_tbl,family = binomial)
+summary(nodal_glm2)
+
+# Analyze the deviance
+anova(nodal_glm2, test="Chisq")
+
+```
+
+### Correlation Matrix
+```{r, nodal-4, echo=FALSE, message=FALSE, warning=FALSE, fig.width=3.5, fig.height=3.5}
+
+# Transform factor type into numeric type
+nodal_transform <- transform(nodal_tbl, aged = as.numeric(aged),
+                                        stage = as.numeric(stage),
+                                        grade = as.numeric(grade),
+                                        xray = as.numeric(xray),
+                                        acid = as.numeric(acid))
+# Correlation matrix
+round(cor(nodal_transform %>% dplyr::select(-c(m,r))),2)
+corrplot::corrplot(cor(nodal_transform %>% dplyr::select(-c(m,r))),order="AOE")
+
+```
+
+\newpage
+
+# Smoking, Age and Death
+
+Smoking is a major health concern among the population, however many individuals of numerous age groups continue to smoke. The goal is to analyze potential relationships between age group, smoking status and mortality rate among women.
+Looking at potential relationships, the first *table*[^6] shows that a greater proportion of smokers in the study were alive after 20 years than non-smokers. In addition, the *binomial regression model*[^7] for mortality against smoking shows a significant negative relationship between the variables, which indicates that smoking decreases mortality rate. This is unexpected, but another factor (age) has not been taken into account, which could explain this unusual relationship. Also, the residual deviance is quite large compared to its degrees of freedom, so this model is not a good fit.
+To investigate this unintuitive relationship, a second *table*[^8] was created to show the relationship between smoking and age in groups of `dead` or `alive`. In this table, there is a larger proportion of younger women who smoke, relative to older women who smoke. Many of these younger women who smoke were still alive after 20 years into the study, while many of the older women passed away.
+Another *binomial regression model*[^9] is fit to the data, this time containing age groups as a predictor. This model is a very strong fit since the residual deviance is quite small relative to its degrees of freedom. Now that `age` has been accounted for, the `smoker` variable is positively correlated with mortality; this is an example of Simpson's paradox. The dependence of smoking status and mortality rate are explained by their respective relationship with age (i.e. smoking and mortality are dependent, conditional on age). 
+If investigators in this study did not measure age, they may have incorrectly concluded that smoking correlates with a lower risk of death. In observational studies such as this one, investigators need to be careful in drawing conclusions before considering other factors that can influence relationships between the variables of interest.
+
+[^6]: Appendix B, Table 1
+[^7]: Appendix B, Binomial Regression 1
+[^8]: Appendix B, Table 2
+[^9]: Appendix B, Binomial Regression 2
+
+\newpage
+
+# Appendix B
+## Smoking Data
+```{r smoking-1, echo=FALSE, message=FALSE, warning=FALSE}
+
+library(SMPracticals)
+data(smoking)
+
+smoking_tbl <- as_data_frame(smoking)
+dplyr::glimpse(smoking_tbl)
+
+```
+
+### Table 1
+```{r smoking-2, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Relationship between mortality and smoking
+xtabs(cbind(dead,alive) ~ smoker,data=smoking_tbl) %>% prop.table(1)
+
+```
+
+### Binomial Regression 1
+```{r smoking-3, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Binomial regression, mortality against smoking
+smoking_glm1 <- glm(cbind(dead,alive) ~ smoker, data = smoking_tbl, family = binomial)
+summary(smoking_glm1)
+
+```
+
+### Table 2
+```{r smoking-4, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Relationship between smoking and age in two groups: dead or alive.
+xtabs(cbind(dead,alive) ~ smoker + age,data=smoking_tbl) %>% prop.table(2)
+
+```
+
+
+### Binomial Regression 2
+```{r smoking-5, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Binomial regression, mortality against age and smoking
+smoking_glm2 <- glm(cbind(dead,alive) ~ age + smoker, data = smoking_tbl, family = binomial)
+summary(smoking_glm2)
+
+```
+

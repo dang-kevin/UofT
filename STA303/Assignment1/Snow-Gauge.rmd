@@ -1,0 +1,134 @@
+---
+title: "Calibrating a Snow Gauge"
+geometry: margin=1in
+output:
+  html_document:
+    df_print: paged
+header-includes:
+- \usepackage{fontspec}
+- \setmainfont{Times New Roman}
+fontsize: 12pt
+---
+
+Snow gauges are used to indirectly measure the density of snow; a high snow density leads to less absorption of water. Analyzing this information is important because we want to monitor water levels and prevent floods from occurring. My analysis involves specifying the relationship between `density` of polyethylene blocks (a substitute for snow) and `gain` -- an amplified version of gamma photon count.
+
+Let's load the tidyverse package and the snow gauge data.
+
+```{r gauge-1, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+# Load data
+gauge <- readr::read_table("https://www.stat.berkeley.edu/~statlabs/data/gauge.data",col_types = "dd")
+
+gauge <- gauge[rowSums(is.na(gauge)) != ncol(gauge),]
+
+glimpse(gauge)
+```
+
+Let's plot the data and residuals.
+
+```{r plots-1, message=FALSE, warning=FALSE}
+# Plot density vs gain
+gauge %>%
+  ggplot(aes(x=gain, y=density)) + 
+  theme_classic() +
+  geom_point(pch=21) +
+  labs(title="Density vs Gain",
+       subtitle="Gauge data",
+       x="Gain",
+       y="Density"~(g/cm^{3}))
+
+# Residuals
+gauge_lm1 <- lm(density~gain, data=gauge)
+data_frame(resid = residuals(gauge_lm1),
+           fitted = fitted(gauge_lm1)) %>%
+  mutate_at("resid",funs( (. - mean(.)) / sd(.))) %>%
+  ggplot(aes(x = fitted,y = resid)) +
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = -2,linetype="dashed",colour="red") +
+  geom_hline(yintercept = 2,linetype="dashed",colour="red") +
+  labs(title = "Residuals vs Fitted Values",
+       subtitle = "Normal linear model for Gauge data",
+       x = "Fitted Values",
+       y = "Residuals")
+
+```
+
+From the *Density vs Gain* plot, it appears as though there is an inverse exponential relationship between the variables. A linear model was initially created, however the *standardized residuals* appear to follow a distinct pattern, so a standard linear model cannot directly be fit to the data. We need to transform the data.
+
+```{r, box-cox, message=FALSE, warning=FALSE}
+
+#Box-Cox transformation
+library(MASS)
+
+gain_boxcox <- boxcox(gain ~ 1,data=gauge)
+gain_boxcox$x[which(gain_boxcox$y == max(gain_boxcox$y))]
+
+
+#Log transformation
+gauge_transform <- gauge %>%
+  mutate(log_gain = log(gain))
+
+```
+
+A *box-cox transformation* was done on the `gain` variable, and the plot shows that a value of $\lambda$ = 0.02020202 is the best power transformation; in this case, a log transformation is appropriate. Now let's fit a model of `density` vs `log(gain)` and make some new plots.
+
+```{r plots-2, message=FALSE, warning=FALSE}
+
+# Plot density vs log(gain)
+gauge_transform %>%
+  ggplot(aes(x=log_gain, y=density)) + 
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_smooth(method = "lm") +
+  labs(title="Density vs log(Gain)",
+       subtitle="Transformed log model for Gauge data",
+       x="log(Gain)",
+       y="Density"~(g/cm^{3}))
+
+# Residuals
+gauge_lm2 <- lm(density ~ log_gain, data=gauge_transform)
+data_frame(resid = residuals(gauge_lm2),
+           fitted = fitted(gauge_lm2)) %>%
+  mutate_at("resid",funs( (. - mean(.)) / sd(.))) %>%
+  ggplot(aes(x = fitted,y = resid)) +
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = -2,linetype="dashed",colour="red") +
+  geom_hline(yintercept = 2,linetype="dashed",colour="red") +
+  labs(title = "Residuals vs Fitted Values",
+       subtitle = "Transformed log model for Gauge data",
+       x = "Fitted Values",
+       y = "Residuals")
+
+# Normal Q-Q
+gauge_transform %>%
+  mutate_at("log_gain", funs((. - mean(.)) / sd(.))) %>%
+  arrange(log_gain) %>%
+  mutate(q = qnorm(1:n() / (n() + 1))) %>%
+  ggplot(aes(x = q,y = log_gain)) +
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_abline(slope = 1,intercept = 0,colour = "red") +
+  labs(title = "Normal QQ-plot",
+       subtitle="Transformed log model for Gauge data",
+       x = "Theoretical Quantiles",
+       y = "Sample Quantiles")
+
+```
+
+After completing a log transformation on the `gain` variable, a valid linear model for *Density vs log(Gain)* was produced since the new *Residuals vs Fitted Values* plot does not show a distinct pattern. Also, the *Normal QQ plot* on the transformed data does not show evidence of skew -- the normality condition is met. 
+
+```{r, regression, message=FALSE, warning=FALSE}
+
+#Regression Output
+summary(gauge_lm2)
+
+```
+
+The *regression output* shows a significant relationship between `log(Gain)` and `density`, as the p-value is extremely small. In addition, the multiple R-squared value of 0.9958 provides further evidence that this model is appropriate.
+
+The linear model is: mean `density` = 1.298013 g/cm^3^ - (0.216203 g/cm^3^ * `log(gain)`). This model can be used to estimate the mean `density` of snow at a particular value of `gain` since the snow gauge has now been calibrated, but we must proceed with caution because polyethylene blocks were used in place of snow blocks for the model.

@@ -1,0 +1,102 @@
+---
+title: "Dungeness Crab Growth"
+geometry: margin=1in
+output:
+  html_document:
+    df_print: paged
+header-includes:
+- \usepackage{fontspec}
+- \setmainfont{Times New Roman}
+fontsize: 12pt
+---
+
+As Dungeness crabs grow, they need to replace their carapace; a process referred to as molting. My analysis involves grouping the adult female Dungeness crabs by whether they recently molted or not, estimating the mean carapace size of both groups, then determining whether there is a significant difference between the groups.
+
+Let's load the crab growth data.
+
+```{r, crab-1, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+# Load data
+crab <- readr::read_table("https://www.stat.berkeley.edu/users/statlabs/data/crabpop.data",col_types = "dc")
+
+glimpse(crab)
+
+```
+
+First let's create a *boxplot* of the shell size (`size`) by the shell type (`shell`). Shell type 0 represents a fouled carapace which can be interpreted as an old shell, while shell type 1 represents a clean carapace -- a recently molted shell. 
+
+```{r, plot-1, message=FALSE, warning=FALSE}
+#Boxplot
+crab %>%
+  ggplot(aes(x=shell, y=size)) +
+  theme_classic() +
+  geom_boxplot() +
+  labs(title="Boxplot of shell size by type",
+       subtitle = "Crab Data",
+       x = "Shell Type",
+       y = "Shell Size"~(mm))
+
+```
+
+The boxplot shows that older shells contain some outliers, while recent shells have no outliers. Now take a look at the summary statistics:
+
+```{r, summary, message=FALSE, warning=FALSE}
+
+group_means <- crab %>%
+  group_by(shell) %>%
+  summarize(group_mean = mean(size),
+            group_median = median(size),
+            group_sd = sd(size),
+            group_size = n())
+group_means
+
+```
+
+So type 0 shells are larger than type 1 shells by about 7mm on average. The next part involves statistical tests:
+
+```{r, tests, message=FALSE, warning=FALSE}
+
+t_test <- t.test(size ~ shell, data = crab, var.equal = TRUE)
+t_test
+
+f_test <- var.test(size ~ shell, data = crab)
+f_test
+
+```
+
+The *two sample t-test* yielded a statistically significant p-value; this indicates that the means of the 2 groups are not equivalent. The two sample groups are independent, since the traps that were used were designed to catch adult female Dungeness crabs of all sizes, meaning that this sample is representative of the population. An *F-test to compare two variances* shows that the two sample group variances are similar -- the constant variance condition is met.
+
+Let's check for normality:
+
+```{r, plot-2, message=FALSE, warning=FALSE}
+#Normal QQ
+crab %>%
+  mutate_at("size",funs( (. - mean(.)) / sd(.))) %>%
+  arrange(size) %>%
+  mutate(q = qnorm(1:n() / (n() + 1))) %>%
+  ggplot(aes(x = q,y = size)) +
+  theme_classic() +
+  geom_point(pch=21) +
+  geom_abline(slope = 1,intercept = 0,colour = "red") +
+  labs(title = "Normal QQ-plot",
+       subtitle = "Crab Data",
+       x = "Theoretical Quantiles",
+       y = "Sample Quantiles")
+
+# Histogram
+crab %>%
+  ggplot(aes(x = size)) +
+  theme_classic() +
+  geom_histogram(aes(y = ..density..),colour="black",fill="lightblue",bins = 15) +
+  geom_density(colour = "red") +
+  labs(title = "Histogram of Shell Size",
+       subtitle = "Crab Data",
+       x = "Shell Size (mm)",
+       y = "Density")
+
+```
+
+Both the *Normal QQ Plot* and *Histogram of Shell Size* show skew in the data, which may be a problem. Fortunately, the sample size of 362 (161 type 0, 201 type 1) is sufficiently large. By the Central Limit Theorem, means of samples from a population approach a normal distribution as sample size increases -- regardless of the population distribution. Thus, the normality condition for the t-test is met.
+
+Given the strong supporting evidence, adult female Dungeness crabs with older carapaces (shell type 0) on average have larger shells than those with recently molted carapaces (shell type 1).

@@ -1,0 +1,95 @@
+---
+title: "Nodal Involvement in Prostate Cancer"
+geometry: margin=1in
+output:
+  html_document:
+    df_print: paged
+header-includes:
+- \usepackage{fontspec}
+- \setmainfont{Times New Roman}
+fontsize: 12pt
+---
+
+When deciding on how to treat prostate cancer, physicians use a cancer staging system which takes into account the presence of cancer in the surrounding lymph nodes, referred to as nodal involvement. My analysis involves determining whether prostate cancer has spread to the lymph nodes based on certain characteristics.
+
+Let's load the data from the `SMPracticals` package:
+
+```{r nodal-1, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+# Load SMPracticals package
+# install.packages("SMPracticals")
+library(SMPracticals)
+data(nodal)
+
+nodal_tbl <- as_data_frame(nodal)
+dplyr::glimpse(nodal_tbl)
+
+```
+
+Starting with the *Nodal Involvement by Predictor* graph, it is difficult to tell whether any of the five characteristics are successful in predicting nodal involvement.
+
+```{r nodal-2, message=FALSE, warning=FALSE}
+# Nodal involvement by predictor
+nodal_tbl %>%
+  gather(variable,value,aged:acid) %>%
+  ggplot(aes(x = value,y = r)) +
+  theme_classic() +
+  facet_wrap(~variable) +
+  geom_jitter(width=0.3,height=0.3,alpha = 0.4) +
+  scale_y_continuous(breaks = c(0,1),labels = c("No Involvement","Nodal Involvement")) +
+  labs(title = "Nodal Involvement, by Predictor",
+       subtitle = "Nodal Data",
+       x = "Predictor Value",
+       y = "Nodal Involvement?")
+
+```
+
+Upon closer inspection, it appears as though `stage`, `acid` and `xray` have more true positive and true negative data points than false positive and false negative data points, which means that they may have a higher success rate when predicting nodal involvement.
+
+Let's try fitting a model:
+
+```{r logreg-1, message=FALSE, warning=FALSE}
+
+# Fit an initial binary logistic regression model
+nodal_glm1 <- glm(r ~ aged + stage + grade + xray + acid,data = nodal_tbl,family = binomial)
+summary(nodal_glm1)
+
+```
+
+An initial *binary logistic regression model* shows that `acid` and `xray` are considered somewhat significant, `stage` is close to the standard significance level of 0.05, while `age` and `grade` are not close to the significance level at all.
+
+To explore the potentially significant predictors further, let's fit a second *binary logistic regression model*, with nodal involvement (`r`) as the response and `stage`, `acid` and `xray` as the predictors. 
+
+```{r logreg-2, message=FALSE, warning=FALSE}
+
+# Try simpler binary logistic regression model
+nodal_glm2 <- glm(r ~ stage + xray + acid,data = nodal_tbl,family = binomial)
+summary(nodal_glm2)
+
+# Analyze the deviance
+anova(nodal_glm2, test="Chisq")
+
+```
+
+The *analysis of deviance table* for the second model shows a significant reduction in the residual deviance as each of the three variables are added to the null model.
+
+```{r, corrmat, message=FALSE, warning=FALSE}
+
+# Transform factor type into numeric type
+nodal_transform <- transform(nodal_tbl, aged = as.numeric(aged),
+                                        stage = as.numeric(stage),
+                                        grade = as.numeric(grade),
+                                        xray = as.numeric(xray),
+                                        acid = as.numeric(acid))
+# Correlation matrix
+round(cor(nodal_transform %>% dplyr::select(-c(m,r))),2)
+
+# We can visualize this better using corrplot
+corrplot::corrplot(cor(nodal_transform %>% dplyr::select(-c(m,r))),order="AOE")
+
+```
+
+In regards to the model assumptions, the values are discrete (0 or 1) and there are also no outliers in the data since the z-value for each predictor is under 3. Also, there is low intercorrelation among the predictors, as shown in the *correlation matrix*.
+
+To clarify what each predictor represents, `stage` is a measure of the size and position of the tumour, `xray` indicates how serious the cancer is from an X-ray reading, and `acid` represents the level of acid phosphatase in the blood serum. These three variables may be helpful indicators of nodal involvement in prostate cancer, from evidence provided by the model. However, physicians should proceed with caution as there are some observations which incorrectly predict nodal involvement.
